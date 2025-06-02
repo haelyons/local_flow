@@ -13,8 +13,8 @@ Because reading documentation is *so* 2022.
 python3 -m venv flow-env
 source flow-env/bin/activate  # Windows: .\flow-env\Scripts\activate
 
-# Install everything (except CUDA)
-pip install fastapi uvicorn sentence-transformers langchain-community langchain-text-splitters faiss-cpu pdfplumber requests beautifulsoup4 gitpython nbformat pydantic
+# Install everything (except your patience)
+pip install sentence-transformers langchain-community langchain-text-splitters faiss-cpu pdfplumber requests beautifulsoup4 gitpython nbformat pydantic fastmcp
 
 # For PyTorch with CUDA (check https://pytorch.org/get-started/locally/ for your version)
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -22,69 +22,78 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 **Note**: Using `faiss-cpu` because `faiss-gpu` is apparently allergic to recent CUDA versions. Your embeddings will still use GPU. Chill.
 
-### 2. Run the Server
+### 2. Configure MCP in Cursor
 
-```bash
-python rag_mcp_server.py
+Add this to your `~/.cursor/mcp.json` (or wherever Cursor keeps its secrets):
+
+```json
+{
+  "mcpServers": {
+    "LocalFlow": {
+      "command": "wsl.exe",
+      "args": [
+        "-d", 
+        "Ubuntu_2404", 
+        "bash", 
+        "-c", 
+        "source /home/<you>/local_flow/flow-env/bin/activate && /home/<you>/local_flow/flow-env/bin/python /home/<you>/local_flow/rag_mcp_server.py"
+      ],
+      "env": {
+        "RAG_DATA_DIR": "/path/to/rag_data_storage"
+      },
+      "scopes": ["rag_read", "rag_write"],
+      "tools": ["add_source", "query_context", "list_sources", "remove_source"]
+    }
+  }
+}
 ```
 
-Server runs on `http://localhost:8081`. Revolutionary stuff.
+Server runs on `http://localhost:8081`. Revolutionary stuff. Adjust paths to your setup (or it won't work, unsurprisingly). 
 
-## Adding Documents
+### 3. Restart Cursor
 
-### PDF Files
-```bash
-curl -X POST "http://localhost:8081/add_source" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source_type": "pdf", 
-    "path_or_url": "/path/to/document.pdf",
-    "source_id": "my_important_pdf"
-  }'
-```
+Because restarting always fixes everything, right?
 
-### Web Pages
-```bash
-curl -X POST "http://localhost:8081/add_source" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source_type": "webpage", 
-    "path_or_url": "https://example.com/definitely-not-stackoverflow",
-    "source_id": "web_wisdom"
-  }'
-```
+## Usage
 
-### Git Repositories
-```bash
-curl -X POST "http://localhost:8081/add_source" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source_type": "git_repo", 
-    "path_or_url": "https://github.com/user/repo.git",
-    "source_id": "someones_code"
-  }'
-```
+Welcome to the future of document ingestion. No more curl commands, no more HTTP status codes. Just sweet, sweet MCP tools.
 
-## Querying Your New Digital Brain
+### Adding Documents
 
-```bash
-curl -X POST "http://localhost:8081/query_context" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What does this even do?",
-    "top_k": 5
-  }'
-```
+Tell Cursor to use the `add_source` tool:
 
-## Other Useful Endpoints
+**PDFs:**
+- Source type: `pdf`
+- Path: `/path/to/your/important-document.pdf` 
+- Source ID: Whatever makes you happy
 
-- `GET /list_sources` - See what you've fed the machine
-- `DELETE /remove_source/{source_id}` - Pretend to delete things
-- `GET /docs` - Interactive API docs at `http://localhost:8081/docs`
+**Web Pages:**
+- Source type: `webpage`  
+- URL: `https://stackoverflow.com/questions/definitely-not-copy-pasted`
+- Source ID: `web_wisdom` or whatever
+
+**Git Repositories:**
+- Source type: `git_repo`
+- URL: `https://github.com/someone/hopefully-documented.git`
+- Source ID: `someones_code`
+
+The tool handles the rest. Like magic, but with more dependencies.
+
+### Querying (who knew it could be so complicated to ask a simple question)
+
+Use the `query_context` tool:
+- Query: "What does this thing actually do?"
+- Top K: How many results you want (default: 5)
+- Source IDs: Filter to specific sources (optional)
+
+### Managing Sources
+
+- `list_sources` - See what you've fed the machine
+- `remove_source` - Pretend to delete things (metadata only, embeddings stick around like bad memories)
 
 ## WSL2 Installation
 
-Got WSL2? Lucky you. Check `INSTALL_WSL2.md` for the *delightful* journey of GPU setup.
+Got WSL2? Lucky you. Check `INSTALL_WSL2.md` for the journey of GPU setup.
 
 ## Features
 
@@ -97,6 +106,20 @@ Got WSL2? Lucky you. Check `INSTALL_WSL2.md` for the *delightful* journey of GPU
 
 ## Architecture
 
-FastAPI server + FAISS + SentenceTransformers + LangChain
+MCP Server + FAISS + SentenceTransformers + LangChain + FastMCP
 
-Vector database stored in `./vector_db`. Don't delete it unless you enjoy re-indexing everything. 
+Vector database stored in `./vector_db` (or wherever `RAG_DATA_DIR` points). Don't delete it unless you enjoy re-indexing everything.
+
+JSON-RPC over stdin/stdout because apparently that's how we communicate with AI tools now. The future is weird.
+
+## Troubleshooting
+
+**"Tool not found"**: Did you restart Cursor? Restart Cursor.
+
+**"WSL command failed"**: Check your paths in `mcp.json`. Also, is WSL actually running?
+
+**"CUDA out of memory"**: Your GPU is having feelings. Try smaller batch sizes or less ambitious documents.
+
+**"Permission denied"**: WSL permissions are a mystery. Try `chmod +x` on everything and pray.
+
+**"It's not working"**: That's not a question. But yes, welcome to local AI tooling. 

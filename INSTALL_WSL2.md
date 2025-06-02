@@ -1,6 +1,6 @@
 # WSL2 GPU Setup Guide
 
-*For when you want the pain of Linux configuration with the convenience of Windows crashes.*
+*For when you want the pain of Linux configuration with the convenience of Windows crashes, now with bonus JSON-RPC complexity.*
 
 ## Prerequisites
 
@@ -9,6 +9,7 @@ Before diving into this technological adventure, ensure you have:
 - An NVIDIA GPU (obviously)
 - Patience (not included)
 - Coffee (highly recommended)
+- A sense of humor (required for WSL2 GPU setup)
 
 ## Step 1: Update Windows
 
@@ -26,6 +27,11 @@ wsl --set-default-version 2
 ```
 
 Install Ubuntu 24.04 LTS from Microsoft Store. Because we're fancy like that.
+
+**MCP Note**: The example config uses "Ubuntu_2404" as the distribution name. Check yours with:
+```powershell
+wsl --list --verbose
+```
 
 ## Step 3: NVIDIA Driver (The Important Part)
 
@@ -138,7 +144,7 @@ make -j$(nproc)  # Go get coffee. This takes forever.
 cd ../python && pip install .
 ```
 
-## Step 8: Does it work?
+## Step 8: Verify Everything Works
 
 ```python
 import torch
@@ -147,14 +153,34 @@ print(torch.cuda.device_count())        # Should show your GPU count
 print(torch.cuda.get_device_name(0))    # Should show your GPU name
 ```
 
-If all return expected values, congratulations! You've successfully navigated the maze of WSL2 GPU setup.
+Test the MCP server manually:
+```bash
+cd /path/to/local_flow
+source flow-env/bin/activate
+python rag_mcp_server.py
+```
+
+It should start without errors and wait for JSON-RPC input. Press Ctrl+C to exit.
+
+Test in Cursor by asking it to use the LocalFlow tools. If it can't find them, restart Cursor (the universal solution).
 
 ## Troubleshooting
 
 - **nvidia-smi not found**: Check paths above
 - **CUDA version mismatch**: Use the version from `nvidia-smi`, not what you think you have
 - **faiss-gpu won't install**: Use faiss-cpu and move on with your life
+- **"Tool not found" in Cursor**: Check your `mcp.json` paths and restart Cursor
+- **WSL permission errors**: Try `chmod +x` on the Python script
+- **"No module named 'fastmcp'"**: You forgot to install fastmcp in the virtual environment
 - **Nothing works**: Turn it off and on again (classic Windows solution)
+
+## MCP-Specific Gotchas
+
+- The MCP server runs entirely in WSL2, but Cursor manages it from Windows
+- Environment variables in `mcp.json` override any you set in WSL
+- Paths in `mcp.json` must be WSL paths (starting with `/home/...`)
+- If you change the virtual environment location, update the activation path
+- JSON-RPC communication happens over stdin/stdout (don't print debug info to stdout)
 
 ## Final Notes
 
