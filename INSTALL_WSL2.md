@@ -2,6 +2,8 @@
 
 *For when you want the pain of Linux configuration with the convenience of Windows crashes, now with bonus JSON-RPC complexity.*
 
+> **Note**: This guide covers WSL2-specific setup details. For basic usage and MCP configuration, see the main `README.md`.
+
 ## Prerequisites
 
 Before diving into this technological adventure, ensure you have:
@@ -102,36 +104,24 @@ Verify with:
 nvcc --version
 ```
 
-## Step 6: Install PyTorch
+## Step 6: Python Dependencies
 
-Visit [PyTorch Get Started](https://pytorch.org/get-started/locally/).
+Follow the installation instructions in `README.md`. Key WSL2-specific notes:
 
-Select your poison:
-- PyTorch Build: Stable
-- OS: Linux (yes, even for WSL2)
-- Package: Pip
-- Language: Python  
-- CUDA: Match your `nvidia-smi` version
-
-Example command:
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-```
-
-## Step 7: The FAISS Situation
+### The FAISS Situation
 
 Here's where things get *interesting*.
 
 `faiss-gpu` doesn't like recent CUDA versions. Your options:
 
-### Option A: Use faiss-cpu (Recommended)
+**Option A: Use faiss-cpu (Recommended)**
 ```bash
 pip install faiss-cpu
 ```
 
 Your embeddings still use GPU. FAISS search runs on CPU. Life goes on.
 
-### Option B: Build faiss-gpu from source (for masochists)
+**Option B: Build faiss-gpu from source (for masochists)**
 ```bash
 git clone https://github.com/facebookresearch/faiss.git
 cd faiss
@@ -144,7 +134,7 @@ make -j$(nproc)  # Go get coffee. This takes forever.
 cd ../python && pip install .
 ```
 
-## Step 8: Verify Everything Works
+## Step 7: Test Everything
 
 ```python
 import torch
@@ -162,25 +152,38 @@ python rag_mcp_server.py
 
 It should start without errors and wait for JSON-RPC input. Press Ctrl+C to exit.
 
-Test in Cursor by asking it to use the LocalFlow tools. If it can't find them, restart Cursor (the universal solution).
+## WSL2-Specific MCP Configuration
+
+The README shows the basic config. Here are WSL2-specific gotchas:
+
+### Path Requirements
+- **WSL paths**: Use `/home/username/...` not Windows paths
+- **Distribution name**: Must match your `wsl --list` output exactly
+- **Python path**: Use the full path to the virtual environment's Python
+
+### Environment Considerations
+- The MCP server runs entirely in WSL2, but Cursor manages it from Windows
+- Environment variables in `mcp.json` override any you set in WSL
+- JSON-RPC communication happens over stdin/stdout (don't print debug info to stdout)
 
 ## Troubleshooting
 
-- **nvidia-smi not found**: Check paths above
+### GPU Issues
+- **nvidia-smi not found**: Check paths above, or try `/mnt/c/Windows/System32/nvidia-smi.exe`
 - **CUDA version mismatch**: Use the version from `nvidia-smi`, not what you think you have
 - **faiss-gpu won't install**: Use faiss-cpu and move on with your life
+
+### MCP Issues
 - **"Tool not found" in Cursor**: Check your `mcp.json` paths and restart Cursor
 - **WSL permission errors**: Try `chmod +x` on the Python script
 - **"No module named 'fastmcp'"**: You forgot to install fastmcp in the virtual environment
+- **WSL command failed**: Check your distribution name and paths in `mcp.json`
+
+### WSL2-Specific Gotchas
+- **Environment activation**: WSL2 uses `source` not `call`
+- **Path separators**: Forward slashes `/` in WSL, backslashes `\` in Windows
+- **Permission denied**: WSL permissions are a mystery. Try `chmod +x` on everything and pray
 - **Nothing works**: Turn it off and on again (classic Windows solution)
-
-## MCP-Specific Gotchas
-
-- The MCP server runs entirely in WSL2, but Cursor manages it from Windows
-- Environment variables in `mcp.json` override any you set in WSL
-- Paths in `mcp.json` must be WSL paths (starting with `/home/...`)
-- If you change the virtual environment location, update the activation path
-- JSON-RPC communication happens over stdin/stdout (don't print debug info to stdout)
 
 ## Final Notes
 

@@ -174,19 +174,36 @@ class RAGServer:
             raise RuntimeError(f"Error processing webpage: {e}")
 
     def _process_git_repo(self, repo_url: str) -> List[Document]:
-        temp_dir = tempfile.mkdtemp()
         documents = []
+        cleanup_temp = False
+        temp_dir = None
+        
         try:
-            logging.info(f"Cloning Git repository: {repo_url} to {temp_dir}")
-            Repo.clone_from(repo_url, temp_dir)
+            # Check if this is a local path to an existing Git repository
+            if os.path.exists(repo_url) and os.path.isdir(repo_url):
+                # Check if it's a valid Git repository
+                try:
+                    repo = Repo(repo_url)
+                    repo_dir = repo_url
+                    logging.info(f"Using local Git repository: {repo_url}")
+                except Exception as e:
+                    logging.error(f"Path exists but is not a valid Git repository: {repo_url}, {e}")
+                    raise ValueError(f"Invalid Git repository path: {e}")
+            else:
+                # It's a remote URL, clone to temp directory
+                temp_dir = tempfile.mkdtemp()
+                repo_dir = temp_dir
+                cleanup_temp = True
+                logging.info(f"Cloning Git repository: {repo_url} to {temp_dir}")
+                Repo.clone_from(repo_url, temp_dir)
 
             relevant_extensions = ('.py', '.md', '.txt', '.rst', '.ipynb', '.json', '.xml', '.yaml', '.yml', '.sh', '.c', '.cpp', '.h', '.hpp')
 
-            for root, _, files in os.walk(temp_dir):
+            for root, _, files in os.walk(repo_dir):
                 for file_name in files:
                     if file_name.endswith(relevant_extensions):
                         file_path = os.path.join(root, file_name)
-                        relative_path = os.path.relpath(file_path, temp_dir)
+                        relative_path = os.path.relpath(file_path, repo_dir)
                         try:
                             content = ""
                             if file_name.endswith('.ipynb'):
@@ -213,7 +230,7 @@ class RAGServer:
             # Raise a standard Python exception
             raise ValueError(f"Could not process Git repository: {e}")
         finally:
-            if os.path.exists(temp_dir):
+            if cleanup_temp and temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
                 logging.info(f"Cleaned up temporary directory: {temp_dir}")
 

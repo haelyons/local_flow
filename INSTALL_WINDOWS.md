@@ -2,6 +2,8 @@
 
 *For when you want the pain of dependency management with the convenience of Windows, now with bonus CUDA complexity.*
 
+> **Note**: This guide covers Windows-specific setup details. For basic usage and MCP configuration, see the main `README.md`.
+
 ## Prerequisites
 
 Before diving into this technological adventure, ensure you have:
@@ -61,49 +63,15 @@ nvcc --version
 
 Both should work. If `nvcc` isn't found, CUDA toolkit isn't in your PATH.
 
-## Step 4: Setup Virtual Environment
+## Step 4: Python Dependencies
 
-Open Command Prompt in your project directory:
+Follow the installation instructions in `README.md`. The key Windows-specific notes:
 
-```cmd
-# Create virtual environment
-python -m venv flow-env
+- Virtual environment activation: `flow-env\Scripts\activate` (not `activate.bat`)
+- Use `faiss-cpu` - don't fight the `faiss-gpu` battle on Windows
+- PyTorch CUDA version must match your `nvcc --version` output
 
-# Activate it (this is different from Linux)
-flow-env\Scripts\activate
-
-# Your prompt should change to show (flow-env)
-```
-
-## Step 5: Install PyTorch with CUDA
-
-Visit [PyTorch Get Started](https://pytorch.org/get-started/locally/).
-
-Select:
-- PyTorch Build: Stable
-- OS: Windows
-- Package: Pip
-- Language: Python
-- CUDA: Match your CUDA version from `nvcc --version`
-
-Example command (adjust CUDA version):
-```cmd
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-```
-
-## Step 6: Install RAG Dependencies
-
-```cmd
-# Core RAG libraries
-pip install sentence-transformers langchain-community langchain-text-splitters pdfplumber requests beautifulsoup4 gitpython nbformat pydantic fastmcp
-
-# FAISS (the eternal struggle)
-pip install faiss-cpu
-```
-
-**About FAISS on Windows**: `faiss-gpu` is notoriously difficult on Windows. `faiss-cpu` works fine and your embeddings still use GPU. Don't fight this battle.
-
-## Step 7: Verify Everything Works
+## Step 5: Test Everything
 
 Test CUDA:
 ```python
@@ -122,39 +90,20 @@ python rag_mcp_server.py
 
 It should start without errors and wait for JSON-RPC input. Press Ctrl+C to exit.
 
-## Step 8: Configure Cursor MCP
+## Windows-Specific MCP Configuration
 
-Find your Cursor config directory:
-- Windows: `%APPDATA%\Cursor\User\globalStorage\cursor.mcp\mcp.json`
-- Or create it in: `~\.cursor\mcp.json`
+The README shows the basic config. Here are Windows-specific gotchas:
 
-Add this configuration:
+### Path Requirements
+- **Always use double backslashes**: `C:\\path\\to\\file`
+- **Use absolute paths**: Relative paths cause mysterious failures
+- **Python executable path**: Use `flow-env\\Scripts\\python.exe` directly
 
-```json
-{
-  "mcpServers": {
-    "LocalFlow": {
-      "command": "cmd.exe",
-      "args": ["/c", "C:\\path\\to\\your\\local_flow\\flow-env\\Scripts\\activate && python C:\\path\\to\\your\\local_flow\\rag_mcp_server.py"],
-      "env": {
-        "RAG_DATA_DIR": "C:\\path\\to\\your\\vector_db"
-      },
-      "scopes": ["rag_read", "rag_write"],
-      "tools": ["add_source", "query_context", "list_sources", "remove_source"]
-    }
-  }
-}
-```
+### Alternative Configurations
 
-**Important**: 
-- Use double backslashes `\\` in JSON paths
-- Replace `C:\\path\\to\\your\\` with your actual paths
-- The `&&` operator works in cmd.exe
+If the standard config doesn't work, try these:
 
-### Alternative PowerShell Configuration
-
-If you prefer PowerShell:
-
+**PowerShell version:**
 ```json
 {
   "mcpServers": {
@@ -170,13 +119,6 @@ If you prefer PowerShell:
   }
 }
 ```
-
-## Step 9: Test in Cursor
-
-1. Restart Cursor (the universal solution)
-2. Open a new chat
-3. Ask Cursor to use the LocalFlow tools
-4. Try adding a PDF or webpage to test
 
 ## Troubleshooting
 
