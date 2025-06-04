@@ -6,8 +6,27 @@ A minimal, local, GPU-accelerated RAG server that actually works. Ships with mor
 
 Because reading documentation is *so* 2022.
 
-### 1. Install Dependencies
+### 1. Platform
 
+- **Windows**: Native Windows setup with CUDA toolkit
+- **WSL2**: Linux experience on Windows (for masochists)
+
+### 2. Install Dependencies
+
+#### Windows
+```cmd
+# Create virtual environment
+python -m venv flow-env
+flow-env\Scripts\activate
+
+# Install everything (except your patience)
+pip install sentence-transformers langchain-community langchain-text-splitters faiss-cpu pdfplumber requests beautifulsoup4 gitpython nbformat pydantic fastmcp
+
+# For PyTorch with CUDA (check https://pytorch.org/get-started/locally/ for your version)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+#### WSL2/Linux
 ```bash
 # Create virtual environment (shocking, I know)
 python3 -m venv flow-env
@@ -22,10 +41,32 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 **Note**: Using `faiss-cpu` because `faiss-gpu` is apparently allergic to recent CUDA versions. Your embeddings will still use GPU. Chill.
 
-### 2. Configure MCP in Cursor
+### 3. Configure MCP in Cursor
+
+Add this to your `~/.cursor/mcp.json` (or `%APPDATA%\Cursor\User\globalStorage\cursor.mcp\mcp.json` on Windows):
+
+#### Windows Configuration
+
+**Command Prompt version:**
+```json
+{
+  "mcpServers": {
+    "LocalFlow": {
+      "command": "cmd.exe",
+      "args": ["/c", "C:\\path\\to\\your\\local_flow\\flow-env\\Scripts\\activate && python C:\\path\\to\\your\\local_flow\\rag_mcp_server.py"],
+      "env": {
+        "RAG_DATA_DIR": "C:\\path\\to\\your\\vector_db"
+      },
+      "scopes": ["rag_read", "rag_write"],
+      "tools": ["add_source", "query_context", "list_sources", "remove_source"]
+    }
+  }
+}
+```
 
 Add this to your `~/.cursor/mcp.json` (or wherever Cursor keeps its secrets):
 
+#### WSL2 Configuration
 ```json
 {
   "mcpServers": {
@@ -50,7 +91,7 @@ Add this to your `~/.cursor/mcp.json` (or wherever Cursor keeps its secrets):
 
 Server runs on `http://localhost:8081`. Revolutionary stuff. Adjust paths to your setup (or it won't work, unsurprisingly). 
 
-### 3. Restart Cursor
+### 4. Restart Cursor
 
 Because restarting always fixes everything, right?
 
@@ -64,7 +105,7 @@ Tell Cursor to use the `add_source` tool:
 
 **PDFs:**
 - Source type: `pdf`
-- Path: `/path/to/your/important-document.pdf` 
+- Path: `/path/to/your/important-document.pdf` (Linux) or `C:\path\to\document.pdf` (Windows)
 - Source ID: Whatever makes you happy
 
 **Web Pages:**
@@ -91,9 +132,13 @@ Use the `query_context` tool:
 - `list_sources` - See what you've fed the machine
 - `remove_source` - Pretend to delete things (metadata only, embeddings stick around like bad memories)
 
-## WSL2 Installation
+## Installation Guides
 
-Got WSL2? Lucky you. Check `INSTALL_WSL2.md` for the journey of GPU setup.
+### Windows
+Check `INSTALL_WINDOWS.md` for complete Windows setup with CUDA toolkit.
+
+### WSL2
+Check `INSTALL_WSL2.md` for the journey of GPU setup in WSL2.
 
 ## Features
 
@@ -102,6 +147,7 @@ Got WSL2? Lucky you. Check `INSTALL_WSL2.md` for the journey of GPU setup.
 - ✅ Multiple document types (PDFs, web pages, Git repos)
 - ✅ Persistent storage (remembers things between restarts)
 - ✅ Source filtering (because organization matters)
+- ✅ Cross-platform (Windows native or WSL2)
 - ❌ Your sanity (sold separately)
 
 ## Architecture
@@ -114,12 +160,23 @@ JSON-RPC over stdin/stdout because apparently that's how we communicate with AI 
 
 ## Troubleshooting
 
+### Universal Issues
 **"Tool not found"**: Did you restart Cursor? Restart Cursor.
-
-**"WSL command failed"**: Check your paths in `mcp.json`. Also, is WSL actually running?
 
 **"CUDA out of memory"**: Your GPU is having feelings. Try smaller batch sizes or less ambitious documents.
 
+**"It's not working"**: That's not a question. But yes, welcome to local AI tooling.
+
+### Windows Specific
+**"Command failed"**: Check if your paths in `mcp.json` use double backslashes `\\`
+
+**"Python not found"**: Python not in PATH. Reinstall with PATH option checked.
+
+**"The system cannot find the path specified"**: Use absolute paths in `mcp.json`
+
+### WSL2 Specific  
+**"WSL command failed"**: Check your paths in `mcp.json`. Also, is WSL actually running?
+
 **"Permission denied"**: WSL permissions are a mystery. Try `chmod +x` on everything and pray.
 
-**"It's not working"**: That's not a question. But yes, welcome to local AI tooling. 
+**"nvidia-smi not found"**: Check the WSL2 GPU setup guide. 

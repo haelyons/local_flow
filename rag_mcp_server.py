@@ -36,7 +36,7 @@ from mcp.server.fastmcp import FastMCP, Context
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stderr)
 
 # --- Configuration Constants ---
-VECTOR_DB_PATH = os.environ.get("RAG_DATA_DIR", "./vector_db") # Use env var for data dir
+VECTOR_DB_PATH = os.environ.get("RAG_DATA_DIR", os.path.join(os.getcwd(), "vector_db")) # Use env var for data dir, fallback to absolute path
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
