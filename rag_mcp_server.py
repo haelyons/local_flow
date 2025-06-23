@@ -242,7 +242,12 @@ class RAGServer:
 
         documents_to_add = []
         try:
+            logging.info(f"Starting to process source: {request.source_type} - {request.path_or_url}")
+            
             if request.source_type == "pdf":
+                # Check if file exists first
+                if not os.path.exists(request.path_or_url):
+                    raise ValueError(f"PDF file not found: {request.path_or_url}")
                 documents_to_add = self._process_pdf(request.path_or_url)
             elif request.source_type == "webpage":
                 documents_to_add = self._process_webpage(request.path_or_url)
@@ -256,15 +261,20 @@ class RAGServer:
                 # Raise a standard Python exception
                 raise ValueError(f"No content extracted from source: {request.path_or_url}")
 
+            logging.info(f"Successfully processed {len(documents_to_add)} document chunks")
+
             for doc in documents_to_add:
                 doc.metadata["source_id"] = source_id
 
+            logging.info(f"Adding documents to vector store...")
             if self.vector_store is None:
                 self.vector_store = FAISS.from_documents(documents_to_add, self._get_embeddings_function())
                 logging.info(f"Created new FAISS vector store with {len(documents_to_add)} documents.")
             else:
                 self.vector_store.add_documents(documents_to_add)
+                logging.info(f"Added {len(documents_to_add)} documents to existing vector store.")
 
+            logging.info(f"Saving vector store to {VECTOR_DB_PATH}")
             self.vector_store.save_local(VECTOR_DB_PATH)
 
             self.indexed_sources[source_id] = SourceInfo(
@@ -282,9 +292,76 @@ class RAGServer:
         except (ValueError, RuntimeError): # Catch the exceptions raised by _process_ functions
             raise # Re-raise them to be caught by FastMCP
         except Exception as e:
-            logging.error(f"Failed to add source {request.path_or_url}: {e}")
+            logging.error(f"Failed to add source {request.path_or_url}: {e}", exc_info=True)
             # Raise a standard Python exception for unexpected errors
             raise RuntimeError(f"Failed to add source: {e}")
+
+    def rebuild_index(self):
+        """
+        Completely rebuilds the FAISS index from scratch using all currently indexed sources.
+        This is useful when the index becomes corrupted or when you want to remove old embeddings.
+        """
+        logging.info("Starting complete index rebuild...")
+        
+        if not self.indexed_sources:
+            logging.info("No sources to rebuild index from.")
+            return {"status": "success", "message": "No sources found, index cleared."}
+        
+        # Clear the current vector store
+        self.vector_store = None
+        
+        # Temporarily store source info
+        sources_to_rebuild = list(self.indexed_sources.items())
+        self.indexed_sources.clear()
+        
+        rebuild_results = []
+        for source_id, source_info in sources_to_rebuild:
+            try:
+                logging.info(f"Re-indexing source: {source_id}")
+                request = AddSourceRequest(
+                    source_type=source_info.type,
+                    path_or_url=source_info.path_or_url,
+                    source_id=source_id
+                )
+                result = self.add_source(request)
+                rebuild_results.append(f"✓ {source_id}: {result['num_chunks_indexed']} chunks")
+            except Exception as e:
+                logging.error(f"Failed to re-index source {source_id}: {e}")
+                rebuild_results.append(f"✗ {source_id}: FAILED - {str(e)}")
+        
+        logging.info("Index rebuild completed")
+        return {
+            "status": "success", 
+            "message": f"Rebuilt index with {len(self.indexed_sources)} sources",
+            "details": rebuild_results
+        }
+
+    def clear_all_sources(self):
+        """
+        Completely clears all sources and rebuilds an empty index.
+        """
+        logging.info("Clearing all sources and rebuilding empty index...")
+        
+        # Clear metadata
+        self.indexed_sources.clear()
+        self._save_indexed_sources()
+        
+        # Clear vector store
+        self.vector_store = None
+        
+        # Remove the FAISS index files
+        if os.path.exists(VECTOR_DB_PATH):
+            for file in os.listdir(VECTOR_DB_PATH):
+                if file.startswith('index'):
+                    file_path = os.path.join(VECTOR_DB_PATH, file)
+                    try:
+                        os.remove(file_path)
+                        logging.info(f"Removed FAISS index file: {file}")
+                    except Exception as e:
+                        logging.warning(f"Could not remove {file_path}: {e}")
+        
+        logging.info("All sources cleared and index reset")
+        return {"status": "success", "message": "All sources cleared and index reset"}
 
     def query_context(self, request: QueryContextRequest) -> QueryContextResponse:
         try:
@@ -376,6 +453,22 @@ def remove_source_tool(source_id: str) -> Dict[str, str]:
     The actual embeddings will remain in the FAISS index until a full re-index.
     """
     return rag_server_instance.remove_source(source_id)
+
+@mcp_app.tool("rebuild_index")
+def rebuild_index_tool() -> Dict[str, Union[str, List[str]]]:
+    """
+    Completely rebuilds the FAISS index from scratch using all currently indexed sources.
+    This is useful when the index becomes corrupted or when old embeddings need to be removed.
+    """
+    return rag_server_instance.rebuild_index()
+
+@mcp_app.tool("clear_all_sources")
+def clear_all_sources_tool() -> Dict[str, str]:
+    """
+    Completely clears all sources and rebuilds an empty index.
+    This removes all metadata and FAISS index files for a clean start.
+    """
+    return rag_server_instance.clear_all_sources()
 
 # --- Main execution block for MCP Server ---
 if __name__ == "__main__":
