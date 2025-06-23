@@ -37,9 +37,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- Configuration Constants ---
 VECTOR_DB_PATH = os.environ.get("RAG_DATA_DIR", os.path.join(os.getcwd(), "vector_db")) # Use env var for data dir, fallback to absolute path
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+EMBEDDING_MODEL_NAME = "all-mpnet-base-v2" # "all-MiniLM-L6-v2" -- faster and smaller, but worse
+CHUNK_SIZE = 2000
+CHUNK_OVERLAP = 400
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f"Using device: {DEVICE} for embedding model.")
