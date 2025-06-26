@@ -47,8 +47,8 @@ logging.info(f"Using device: {DEVICE} for embedding model.")
 # --- Data Models for RAG Logic ---
 # These models remain largely the same, but will be used by FastMCP for type hinting and schema generation.
 class AddSourceRequest(BaseModel):
-    source_type: str = Field(..., description="Type of source: 'pdf', 'webpage', 'git_repo'")
-    path_or_url: str = Field(..., description="Local file path, web URL, or Git repository URL")
+    source_type: str = Field(..., description="Type of source: 'pdf', 'webpage', 'git_repo', 'folder'")
+    path_or_url: str = Field(..., description="Local file path, web URL, Git repository URL, or folder path")
     source_id: Optional[str] = Field(None, description="Optional unique ID for the source. If not provided, one will be generated.")
 
 class QueryContextRequest(BaseModel):
@@ -197,7 +197,7 @@ class RAGServer:
                 logging.info(f"Cloning Git repository: {repo_url} to {temp_dir}")
                 Repo.clone_from(repo_url, temp_dir)
 
-            relevant_extensions = ('.py', '.md', '.txt', '.rst', '.ipynb', '.json', '.xml', '.yaml', '.yml', '.sh', '.c', '.cpp', '.h', '.hpp')
+            relevant_extensions = ('.py', '.md', '.txt', '.rst', '.ipynb', '.json', '.xml', '.yaml', '.yml', '.sh', '.c', '.cpp', '.h', '.hpp', '.html', '.htm')
 
             for root, _, files in os.walk(repo_dir):
                 for file_name in files:
@@ -234,6 +234,53 @@ class RAGServer:
                 shutil.rmtree(temp_dir)
                 logging.info(f"Cleaned up temporary directory: {temp_dir}")
 
+    def _process_folder(self, folder_path: str) -> List[Document]:
+        documents = []
+        
+        try:
+            # Check if folder exists
+            if not os.path.exists(folder_path):
+                raise ValueError(f"Folder not found: {folder_path}")
+            
+            if not os.path.isdir(folder_path):
+                raise ValueError(f"Path is not a directory: {folder_path}")
+            
+            logging.info(f"Processing folder: {folder_path}")
+            
+            # Include HTML and XML files along with other text formats
+            relevant_extensions = ('.py', '.md', '.txt', '.rst', '.ipynb', '.json', '.xml', '.yaml', '.yml', '.sh', '.c', '.cpp', '.h', '.hpp', '.html', '.htm', '.js', '.css', '.ts', '.jsx', '.tsx')
+
+            for root, _, files in os.walk(folder_path):
+                for file_name in files:
+                    if file_name.endswith(relevant_extensions):
+                        file_path = os.path.join(root, file_name)
+                        relative_path = os.path.relpath(file_path, folder_path)
+                        try:
+                            content = ""
+                            if file_name.endswith('.ipynb'):
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    notebook_content = nbformat.read(f, as_version=4)
+                                    for cell in notebook_content.cells:
+                                        if cell.cell_type in ['code', 'markdown']:
+                                            content += cell.source + "\n\n"
+                                logging.debug(f"Processed .ipynb file: {relative_path}")
+                            else:
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+                                logging.debug(f"Processed text file: {relative_path}")
+
+                            if content:
+                                documents.append(Document(page_content=content, metadata={"source": folder_path, "file_path": relative_path, "source_type": "folder"}))
+                        except Exception as e:
+                            logging.warning(f"Could not read/process file {file_path}: {e}")
+
+            logging.info(f"Processed folder: {folder_path}, extracted {len(documents)} documents.")
+            return self.text_splitter.split_documents(documents)
+        except Exception as e:
+            logging.error(f"Error processing folder {folder_path}: {e}")
+            # Raise a standard Python exception
+            raise ValueError(f"Could not process folder: {e}")
+
     def add_source(self, request: AddSourceRequest):
         source_id = request.source_id if request.source_id else f"{request.source_type}_{len(self.indexed_sources) + 1}"
         if source_id in self.indexed_sources:
@@ -253,9 +300,11 @@ class RAGServer:
                 documents_to_add = self._process_webpage(request.path_or_url)
             elif request.source_type == "git_repo":
                 documents_to_add = self._process_git_repo(request.path_or_url)
+            elif request.source_type == "folder":
+                documents_to_add = self._process_folder(request.path_or_url)
             else:
                 # Raise a standard Python exception
-                raise ValueError("Invalid source_type. Must be 'pdf', 'webpage', or 'git_repo'.")
+                raise ValueError("Invalid source_type. Must be 'pdf', 'webpage', 'git_repo', or 'folder'.")
 
             if not documents_to_add:
                 # Raise a standard Python exception
@@ -424,7 +473,7 @@ rag_server_instance = RAGServer()
 @mcp_app.tool("add_source")
 def add_source_tool(request: AddSourceRequest) -> Dict[str, Union[str, int]]:
     """
-    Adds a new data source (PDF, webpage, or Git repository) to the RAG index.
+    Adds a new data source (PDF, webpage, Git repository, or folder) to the RAG index.
     This tool initiates the ingestion, chunking, embedding, and storage process.
     """
     return rag_server_instance.add_source(request)
